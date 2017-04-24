@@ -1,0 +1,8 @@
+
+Next steps
+----------
+
+* Add docstring to each class and methods
+* Add more doctest
+* Add unittest
+* Add benchmark rmapcalc/pygrass test a Cython class(?)

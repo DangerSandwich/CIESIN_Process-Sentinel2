@@ -9,10 +9,6 @@ output_dir="/data2/sentinel2/analysis_python/resample/"
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 first_folder = next(os.walk(raw_dir))[1]
-#print first_folder
-# raster = gdal.Open(dir)
-# banddataraster = raster.GetRasterBand(1)
-# dataraster = banddataraster.ReadAsArray().astype(np.float)
 
 # resample the graph to 100 meter
 def resample(name):
@@ -37,6 +33,7 @@ def resample(name):
             #if the jpeg has already been resample, continue
             if os.path.isfile(write_file):
                 continue
+
             #create a dir if the output path don't exists
             if not os.path.exists(write_dir):
                 os.makedirs(write_dir)
@@ -46,9 +43,9 @@ def resample(name):
             cmd = "gdalwarp -r average -tr 100 100 -overwrite -srcnodata 0 -multi -wm 5000 "
             process = subprocess.Popen(cmd+jptwo_dir+' '+write_file, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             stderr = ''.join(process.stderr.readlines())
+            #if there is a error, print it
             if len(stderr) > 0:
                 raise IOError(stderr)
 
 for data in first_folder:
     resample(data)
-

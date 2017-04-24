@@ -1,12 +1,10 @@
 import gdal
 import numpy as np
 import os
-import subprocess
 
 #calculate the ndvi and return the index
-def calculateNDVI(tile):
-
-    count = 0
+def calculateNDVI(tile, bands):
+    band_dic = {}
     #Pick up the files of B04 and B08
     band4_dir = resample_dir + tile + '/' + 'B04/'
     band8_dir = resample_dir + tile + '/' + 'B08/'
@@ -51,24 +49,49 @@ def calculateNDVI(tile):
     ndvi = diff / summ
     ndvi[np.where(summ == 0)] = -1
     ndvi = np.where(ndvi == 1, -1, ndvi)
+    # union all the bands
+    for band in bands:
+        ndvi, band_dic[band] = union(ndvi, band)
+    #pick up the ndvi with the largest value
     ndvi_pickup = np.amax(ndvi, axis = 0)
     index_max = np.argmax(ndvi, axis = 0)
     ndvi_matrix = ndvi_pickup.reshape(shape)
-    np.savetxt("test.txt", ndvi_matrix, delimiter = ',')
     #call the create_tiff function to transform the output into a tif
     tif_dir = output_dir + 'NDVI/'
     tif_name = tif_dir + tile + '_NDVI.tif'
-    if os.path.isfile(tif_name):
-        return index_max
+
+
     if not os.path.exists(tif_dir):
         os.makedirs(tif_dir)
-    create_tif(tif_name, ndvi_matrix, geoTransform, geoProjection)
-    return index_max
+    if not os.path.isfile(tif_name):
+        create_tif(tif_name, ndvi_matrix, geoTransform, geoProjection)
+
+    return index_max, band_dic, shape, raster
+
+def union(ndvi, band):
+
+    band_dir = resample_dir + tile + '/' + band + '/'
+    filenames = []
+    for (dirpath, dirnames, filename) in os.walk(band_dir):
+        filenames.extend(filename)
+    band_matrix = []
+    filenames.sort()
+    for band_file in filenames:
+        raster = gdal.Open(band_dir + band_file)
+        banddataraster = raster.GetRasterBand(1)
+        dataraster = banddataraster.ReadAsArray().astype(np.float)
+        band_matrix.append(dataraster.flatten())
+    band_matrix = np.array(band_matrix)
+    index_zero = np.where(band_matrix == 0)
+    ndvi[index_zero] = -1
+    return ndvi, band_matrix
+
+
 
 #define the function to create the tif file
 def create_tif(filename, matrix, geoTransform, geoProjection):
-''' Create an output file of the same size as the inputted
-image, but with only 1 output image band.'''
+    ''' Create an output file of the same size as the inputted
+    image, but with only 1 output image band.'''
 
     driver = gdal.GetDriverByName( "GTiff" )
     cols = matrix.shape[1]
@@ -85,36 +108,23 @@ image, but with only 1 output image band.'''
     return
 
 #define the function to pickup value of different band
-def pick_up(index, band, tile):
+def pick_up(index, band_matrix, shape, raster, band):
     tif_dir = output_dir + band + '/'
     tif_name = tif_dir + tile + '_' + band + '.tif'
     if os.path.isfile(tif_name):
         return
-    band_dir = resample_dir + tile + '/' + band + '/'
-    filenames = []
-    for (dirpath, dirnames, filename) in os.walk(band_dir):
-        filenames.extend(filename)
-    band_matrix = []
-    filenames.sort()
-    for band_file in filenames:
-        raster = gdal.Open(band_dir + band_file)
-        banddataraster = raster.GetRasterBand(1)
-        dataraster = banddataraster.ReadAsArray().astype(np.float)
-        band_matrix.append(dataraster.flatten())
-    band_matrix = np.array(band_matrix)
-    #get the row index of the max value
-    shape = dataraster.shape
-    ncol = shape[0] * shape[1]
+    ncol = band_matrix.shape[1]
     col = np.indices((1, ncol))[1]
     row = index
     band_out = band_matrix[row, col]
-
     band_matrix = band_out.reshape(shape)
+
     if not os.path.exists(tif_dir):
         os.makedirs(tif_dir)
 
     geoTransform = raster.GetGeoTransform()
     geoProjection = raster.GetProjection()
+
     create_tif(tif_name, band_matrix, geoTransform, geoProjection)
 
 
@@ -128,10 +138,10 @@ if __name__ == '__main__':
     count = 0
     for tile in tile_list_test:
         print "calculate the NDVI of tile", tile
-        index = calculateNDVI(tile)
+
+        index, band_dic, shape, raster = calculateNDVI(tile, bands)
         for band in bands:
             print "pick up", band
-            pick_up(index, band, tile)
-        count += 1
+            pick_up(index, band_dic[band], shape, raster, band)
 
     print count, "tile in total"
